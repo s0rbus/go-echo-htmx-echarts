@@ -1,0 +1,9 @@
+{{define "chartfilter"}}
+<button 
+    hx-get="/charts-hx?chart_id={{ .Chart_id }}&chart_type=page_views&period={{.Period}}"
+    hx-swap="none"
+    id="id_last_week_filter_btn_{{.Period}}" 
+    class="bg-white rounded shadow p-2 text-sm flex items-center font-semibold mr-2 cursor-pointer {{ if eq .Selected 
+ "true"}}text-indigo-600 {{ else }}text-gray-600 {{end}}">{{.Label}}
+</button>
+{{end}}
