@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -28,7 +28,7 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 
-var CHART_TYPES map[string]string {
+var CHART_TYPES = map[string]string {
     "page_views": "Total Page Views",
     "unique_visitors": "Unique Visitors",
     "signups": "Signups",
@@ -37,19 +37,20 @@ var CHART_TYPES map[string]string {
 func main() {
 	e := echo.New()
 	e.HideBanner = true
+  e.Debug = true
 
 	// Routes (using templates)
 	t := &Template{
 		templates: template.Must(template.New("").Funcs(template.FuncMap{
     "dict": func(values ...interface{}) (map[string]interface{}, error) {
         if len(values)%2 != 0 {
-            return nil, errors.New("invalid dict call")
+            return nil, fmt.Errorf("invalid dict call")
         }
         dict := make(map[string]interface{}, len(values)/2)
         for i := 0; i < len(values); i+=2 {
             key, ok := values[i].(string)
             if !ok {
-                return nil, errors.New("dict keys must be strings")
+                return nil, fmt.Errorf("dict keys must be strings")
             }
             dict[key] = values[i+1]
         }
@@ -59,7 +60,7 @@ func main() {
 	}
 	e.Renderer = t
 	e.GET("/", dashboard)
-	e.GET("/charts", charts)
+	e.GET("/charts", chart_view_hx)
   e.Static("/", "assets")
 
   // Start server
@@ -75,10 +76,28 @@ func dashboard(c echo.Context) error {
   type Data struct {
     Title string
     Welcome string
+    Charts []*charts.Line
   }
+  chart_data := fake_chart_data(7, "Total Page Views")
+  chart_id := c.FormValue("chart_id")
+  // create a new line instance
+	line := charts.NewLine()
+	// set some global options like Title/Legend/ToolTip or anything else
+	line.SetGlobalOptions(
+		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros,ChartID: chart_id}),
+		charts.WithTitleOpts(opts.Title{
+			Title:    "Total Page Views",
+		}))
+
+	// Put data into instance
+	line.SetXAxis(chart_data.X).
+	AddSeries("Category A", chart_data.Y).
+	SetSeriesOptions(charts.WithLineChartOpts(opts.LineChart{Smooth: true}))
+  
   data := Data {
     Title: "htmx and echarts",
     Welcome: "Demo of using HTMX with echarts",
+    Charts: []*charts.Line{line},
   }
   return c.Render(http.StatusOK,"dashboard", data)
 }
@@ -107,14 +126,14 @@ func chart_view_hx(c echo.Context) error {
   filter_by := days_in_period[period]
 
   //simulate fetching this from your database
-  chart_title := CHART_TYPES{chart_type}
+  chart_title := CHART_TYPES[chart_type]
   chart_data := fake_chart_data(filter_by, chart_title)
 
   // create a new line instance
 	line := charts.NewLine()
 	// set some global options like Title/Legend/ToolTip or anything else
 	line.SetGlobalOptions(
-		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros}),
+		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros, ChartID: chart_id}),
 		charts.WithTitleOpts(opts.Title{
 			Title:    chart_title,
 		}))
@@ -123,7 +142,7 @@ func chart_view_hx(c echo.Context) error {
 	line.SetXAxis(chart_data.X).
 	AddSeries("Category A", chart_data.Y).
 	SetSeriesOptions(charts.WithLineChartOpts(opts.LineChart{Smooth: true}))
-	line.Render(c.Response.Writer)
+	line.Render(io.Writer(c.Response().Writer))
   return nil
 }
 
@@ -151,7 +170,7 @@ func fake_chart_data(num_days int, chart_title string) FakeData {
   var dates []string
   var y []opts.LineData
   for i:=0;i<num_days;i++ {
-    dates = append(dates, base.Add(time.Day * (-1 * i)).Format("02 Jan"))
+    dates = append(dates, base.AddDate(0,0,-1).Format("02 Jan"))
     y = append(y, opts.LineData{Value:rand.Intn(50) + 10})
   }
   
